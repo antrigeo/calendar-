@@ -1,0 +1,1025 @@
+import { useState, useEffect, useRef } from "react";
+
+// ── TOKENS ──────────────────────────────────────────────────────────────────
+const C = {
+  bg:          "#0C0E16",
+  surface:     "#13151F",
+  surfaceHigh: "#1C1F2E",
+  border:      "#252837",
+  borderLight: "#2E3147",
+  accent:      "#4F6EF7",
+  accentLight: "#7B95FF",
+  accentMuted: "rgba(79,110,247,0.13)",
+  text:        "#E9EBF5",
+  textMuted:   "#7279A0",
+  textDim:     "#3D4260",
+  success:     "#2ECC8F",
+  warning:     "#F5A623",
+  danger:      "#EF5350",
+  purple:      "#9B6FEB",
+  pink:        "#E8638A",
+};
+
+// ── STATIC DATA ──────────────────────────────────────────────────────────────
+const DAYS_SHORT  = ["Κυρ","Δευ","Τρι","Τετ","Πεμ","Παρ","Σαβ"];
+const MONTHS      = ["Ιανουάριος","Φεβρουάριος","Μάρτιος","Απρίλιος","Μάιος","Ιούνιος","Ιούλιος","Αύγουστος","Σεπτέμβριος","Οκτώβριος","Νοέμβριος","Δεκέμβριος"];
+const MONTHS_SHORT= ["Ιαν","Φεβ","Μαρ","Απρ","Μαϊ","Ιουν","Ιουλ","Αυγ","Σεπ","Οκτ","Νοε","Δεκ"];
+
+const EVENT_TYPES = {
+  work:     { label:"Εργασία",    color: C.accent  },
+  study:    { label:"Σπουδές",    color: C.purple  },
+  social:   { label:"Κοινωνικό", color: C.success },
+  personal: { label:"Προσωπικό", color: C.warning },
+};
+
+const QUICK_TEMPLATES = [
+  { icon:"☕", label:"Καφές",         type:"social",   time:"10:00" },
+  { icon:"🍽️", label:"Φαγητό",       type:"social",   time:"13:00" },
+  { icon:"📚", label:"Study Session", type:"study",    time:"14:00" },
+  { icon:"💼", label:"Meeting",       type:"work",     time:"09:00" },
+  { icon:"🏋️", label:"Gym",          type:"personal", time:"07:00" },
+];
+
+const STATUS_OPTIONS = [
+  { key:"free",      label:"Ελεύθερος/η", color: C.success, dot:"🟢" },
+  { key:"busy",      label:"Απασχολημένος/η", color: C.danger, dot:"🔴" },
+  { key:"maybe",     label:"Ίσως",        color: C.warning, dot:"🟡" },
+];
+
+const ALL_USERS = [
+  { id:1, name:"Μαρία",  surname:"Κωνσταντίνου", avatar:"ΜΚ", color:C.purple,  status:"free",  username:"maria.k" },
+  { id:2, name:"Νίκος",  surname:"Παπαδόπουλος", avatar:"ΝΠ", color:C.success, status:"busy",  username:"nikos.p" },
+  { id:3, name:"Έλενα",  surname:"Σταύρου",      avatar:"ΕΣ", color:C.pink,    status:"maybe", username:"elena.s" },
+  { id:4, name:"Κώστας", surname:"Αντωνίου",     avatar:"ΚΑ", color:C.warning, status:"free",  username:"kostas.a" },
+  { id:5, name:"Σοφία",  surname:"Μιχαήλ",       avatar:"ΣΜ", color:C.accent,  status:"free",  username:"sofia.m" },
+];
+
+const INIT_EVENTS = [
+  { id:1, title:"Project Meeting",  date:"2026-06-16", time:"10:00", type:"work",     shared:[1,2], reminder:true  },
+  { id:2, title:"Thesis Review",    date:"2026-06-17", time:"14:00", type:"study",    shared:[],    reminder:true  },
+  { id:3, title:"Καφές με Μαρία",   date:"2026-06-18", time:"11:00", type:"social",   shared:[1],   reminder:false },
+  { id:4, title:"Gym",              date:"2026-06-19", time:"09:00", type:"personal", shared:[],    reminder:true  },
+  { id:5, title:"Team Deadline",    date:"2026-06-20", time:"17:00", type:"work",     shared:[1,2,3],reminder:true },
+];
+
+const INIT_INVITES = [
+  { id:101, fromId:1, title:"Καφές @ Costa",    date:"2026-06-21", time:"11:00", type:"social",  message:"Θα πας;" },
+  { id:102, fromId:2, title:"Study Session",    date:"2026-06-22", time:"15:00", type:"study",   message:"Library μαζί?" },
+];
+
+// Meetup proposals: sender proposes multiple slots, receiver picks one
+const INIT_PROPOSALS = [
+  {
+    id:201, fromId:1, toId:0, // toId:0 = me
+    type:"social", label:"Καφές", icon:"☕",
+    message:"Πότε μπορείς για καφέ;",
+    status:"pending", // pending | accepted | declined
+    slots:[
+      { id:"s1", date:"2026-06-23", time:"10:00", picked:false },
+      { id:"s2", date:"2026-06-24", time:"11:00", picked:false },
+      { id:"s3", date:"2026-06-25", time:"17:00", picked:false },
+    ]
+  },
+];
+
+const MEETUP_TYPES = [
+  { icon:"☕", label:"Καφές",      type:"social"   },
+  { icon:"🍽️", label:"Φαγητό",    type:"social"   },
+  { icon:"📚", label:"Εργασία",   type:"study"    },
+  { icon:"🎮", label:"Διασκέδαση",type:"social"   },
+  { icon:"💼", label:"Meeting",   type:"work"     },
+  { icon:"🏋️", label:"Γυμναστική",type:"personal" },
+];
+
+const INIT_PROFILE = {
+  name:"Αντρί", surname:"Γεωργίου",
+  username:"antri.g", email:"antri@example.com",
+  status:"free",
+  notif:{ push:true, email:false, sound:true, eventReminders:true, invites:true },
+  theme:"dark",
+};
+
+// ── HELPERS ──────────────────────────────────────────────────────────────────
+const fmtDate = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const today   = new Date(2026,5,16);
+
+// ── AVATAR ───────────────────────────────────────────────────────────────────
+function Avatar({ initials, color, size=36 }) {
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", background:color,
+      display:"flex", alignItems:"center", justifyContent:"center",
+      fontSize:size*0.33, fontWeight:700, color:"#fff", flexShrink:0 }}>
+      {initials}
+    </div>
+  );
+}
+
+// ── STATUS DOT ────────────────────────────────────────────────────────────────
+function StatusDot({ status, size=8 }) {
+  const s = STATUS_OPTIONS.find(x=>x.key===status) || STATUS_OPTIONS[0];
+  return <div style={{ width:size, height:size, borderRadius:"50%", background:s.color, border:`2px solid ${C.bg}`, flexShrink:0 }} />;
+}
+
+// ── NOTIFICATION TOAST ────────────────────────────────────────────────────────
+function Toast({ notif }) {
+  if (!notif) return null;
+  const bg = notif.type==="danger" ? C.danger : notif.type==="warning" ? C.warning : C.success;
+  return (
+    <div style={{ position:"fixed", top:20, right:20, zIndex:9999,
+      background:bg, color:"#fff", padding:"12px 18px", borderRadius:12,
+      fontSize:13, fontWeight:500, boxShadow:"0 8px 32px rgba(0,0,0,0.4)",
+      maxWidth:280, animation:"slideIn 0.2s ease" }}>
+      {notif.msg}
+    </div>
+  );
+}
+
+// ── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function PlanifyApp() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
+
+  const [tab, setTab]             = useState("calendar");
+  const [profile, setProfile]     = useState(INIT_PROFILE);
+  const [events, setEvents]       = useState(INIT_EVENTS);
+  const [invites, setInvites]     = useState(INIT_INVITES);
+  const [proposals, setProposals] = useState(INIT_PROPOSALS);
+  const [friends, setFriends]     = useState(ALL_USERS.slice(0,3));
+  const [curMonth, setCurMonth]   = useState(new Date(2026,5,1));
+  const [selDate, setSelDate]     = useState(today);
+  const [notif, setNotif]         = useState(null);
+  const [showProfile, setShowProfile] = useState(false);
+  const [showAdd, setShowAdd]     = useState(false);
+  const [showShare, setShowShare] = useState(null);
+  const [showInviteModal, setShowInviteModal] = useState(null);
+  const [showMeetup, setShowMeetup] = useState(null); // friend to propose meetup to
+  const [showProposalReply, setShowProposalReply] = useState(null); // proposal to reply to
+  const [searchQuery, setSearchQuery] = useState("");
+  const [newEv, setNewEv]         = useState({ title:"", time:"09:00", type:"work", shared:[], reminder:false, inviteMsg:"" });
+  const [profileTab, setProfileTab] = useState("info");
+
+  const pendingInvites   = invites.length;
+  const pendingProposals = proposals.filter(p=>p.toId===0 && p.status==="pending").length;
+  const pendingCount     = pendingInvites + pendingProposals;
+
+  const toast = (msg, type="success") => {
+    setNotif({msg,type});
+    setTimeout(()=>setNotif(null), 2600);
+  };
+
+  const eventsForDate = d => events.filter(e=>e.date===fmtDate(d));
+
+  const addEvent = () => {
+    if (!newEv.title.trim()) return;
+    setEvents([...events, {...newEv, id:Date.now(), date:fmtDate(selDate)}]);
+    setNewEv({title:"",time:"09:00",type:"work",shared:[],reminder:false,inviteMsg:""});
+    setShowAdd(false);
+    toast("Event αποθηκεύτηκε!");
+  };
+
+  const applyTemplate = t => {
+    setNewEv({...newEv, title:t.label, type:t.type, time:t.time});
+  };
+
+  const deleteEvent = id => { setEvents(events.filter(e=>e.id!==id)); toast("Διαγράφηκε","danger"); };
+  const toggleShare = (evId, uid) => {
+    setEvents(events.map(e=>{
+      if(e.id!==evId) return e;
+      const shared = e.shared.includes(uid) ? e.shared.filter(f=>f!==uid) : [...e.shared, uid];
+      return {...e, shared};
+    }));
+  };
+  const acceptInvite = id => { setInvites(invites.filter(i=>i.id!==id)); toast("Αποδέχτηκες το event!"); };
+  const declineInvite = id => { setInvites(invites.filter(i=>i.id!==id)); toast("Αρνήθηκες","warning"); };
+
+  const searchResults = searchQuery.length > 1
+    ? ALL_USERS.filter(u => !friends.find(f=>f.id===u.id) &&
+        (u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         u.surname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         u.username.toLowerCase().includes(searchQuery.toLowerCase())))
+    : [];
+
+  const addFriend = u => {
+    setFriends([...friends, u]);
+    setSearchQuery("");
+    toast(`Ο/Η ${u.name} προστέθηκε στους φίλους!`);
+  };
+
+  // Calendar grid
+  const { firstDay, daysInMonth } = (() => {
+    const y=curMonth.getFullYear(), m=curMonth.getMonth();
+    return { firstDay:new Date(y,m,1).getDay(), daysInMonth:new Date(y,m+1,0).getDate() };
+  })();
+
+  // Week dates
+  const weekDates = (() => {
+    const day = selDate.getDay();
+    return Array.from({length:7},(_,i)=>{ const d=new Date(selDate); d.setDate(selDate.getDate()-day+i); return d; });
+  })();
+
+  // ── NAV ITEMS ──────────────────────────────────────────────────────────────
+  const NAV = [
+    { id:"calendar", icon:"📅", label:"Ημερολόγιο" },
+    { id:"week",     icon:"📊", label:"Εβδομάδα"   },
+    { id:"friends",  icon:"👥", label:"Φίλοι"       },
+    { id:"reminders",icon:"🔔", label:"Υπενθυμίσεις", badge: pendingCount },
+  ];
+
+  // ── SHARED STYLES ──────────────────────────────────────────────────────────
+  const card = { background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, padding:20 };
+  const inputSt = { background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, padding:"10px 14px", fontSize:14, width:"100%", outline:"none", boxSizing:"border-box" };
+  const btn = { background:C.accent, color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:14, fontWeight:600, cursor:"pointer" };
+  const btnGhost = { background:"none", border:`1px solid ${C.border}`, borderRadius:8, padding:"10px 20px", fontSize:14, color:C.textMuted, cursor:"pointer" };
+
+  // ── EVENT CARD ──────────────────────────────────────────────────────────────
+  const EventCard = ({ev}) => (
+    <div style={{ background:C.surface, borderRadius:12, padding:"12px 14px", border:`1px solid ${C.border}`, borderLeft:`3px solid ${EVENT_TYPES[ev.type].color}` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:600, fontSize:14, marginBottom:4 }}>{ev.title}</div>
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, color:C.textMuted }}>⏰ {ev.time}</span>
+            <span style={{ fontSize:11, background:`${EVENT_TYPES[ev.type].color}22`, color:EVENT_TYPES[ev.type].color, padding:"2px 8px", borderRadius:20, fontWeight:500 }}>{EVENT_TYPES[ev.type].label}</span>
+            {ev.reminder && <span style={{ fontSize:11, color:C.warning }}>🔔</span>}
+          </div>
+          {ev.shared.length>0 && (
+            <div style={{ display:"flex", gap:4, marginTop:8, alignItems:"center" }}>
+              {ev.shared.map(uid=>{ const f=ALL_USERS.find(u=>u.id===uid); return f ? <Avatar key={uid} initials={f.avatar} color={f.color} size={20}/> : null; })}
+              <span style={{ fontSize:11, color:C.textMuted }}>κοινό</span>
+            </div>
+          )}
+        </div>
+        <div style={{ display:"flex", gap:4, marginLeft:8 }}>
+          <button onClick={()=>setShowShare(ev)} title="Κοινοποίηση"
+            style={{ background:C.accentMuted, border:"none", borderRadius:6, padding:"6px 10px", cursor:"pointer", fontSize:13, color:C.accentLight }}>↗</button>
+          <button onClick={()=>deleteEvent(ev.id)}
+            style={{ background:"none", border:"none", borderRadius:6, padding:"6px 8px", cursor:"pointer", fontSize:13, color:C.textDim }}>✕</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── SIDEBAR (desktop) ──────────────────────────────────────────────────────
+  const Sidebar = () => (
+    <div style={{ width:220, background:C.surface, borderRight:`1px solid ${C.border}`, display:"flex", flexDirection:"column", flexShrink:0, height:"100vh", position:"sticky", top:0 }}>
+      {/* Logo */}
+      <div style={{ padding:"20px 20px 16px", borderBottom:`1px solid ${C.border}` }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ width:34, height:34, background:C.accent, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17 }}>📅</div>
+          <span style={{ fontSize:17, fontWeight:700, letterSpacing:"-0.3px" }}>Planify</span>
+        </div>
+      </div>
+      {/* Nav */}
+      <nav style={{ flex:1, padding:"12px 10px", display:"flex", flexDirection:"column", gap:2 }}>
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setTab(n.id)} style={{
+            display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+            borderRadius:10, border:"none", cursor:"pointer", textAlign:"left",
+            background: tab===n.id ? C.accentMuted : "none",
+            color: tab===n.id ? C.accentLight : C.textMuted,
+            fontWeight: tab===n.id ? 600 : 400, fontSize:14, position:"relative",
+          }}>
+            <span style={{ fontSize:16 }}>{n.icon}</span>
+            {n.label}
+            {n.badge>0 && <span style={{ marginLeft:"auto", background:C.danger, color:"#fff", borderRadius:20, fontSize:10, fontWeight:700, padding:"2px 6px", minWidth:16, textAlign:"center" }}>{n.badge}</span>}
+          </button>
+        ))}
+      </nav>
+      {/* Profile */}
+      <div style={{ padding:"12px 10px", borderTop:`1px solid ${C.border}` }}>
+        <button onClick={()=>setShowProfile(true)} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, border:"none", cursor:"pointer", background:"none", width:"100%", textAlign:"left" }}>
+          <div style={{ position:"relative" }}>
+            <Avatar initials={profile.name[0]+profile.surname[0]} color={C.accent} size={34}/>
+            <div style={{ position:"absolute", bottom:-1, right:-1 }}><StatusDot status={profile.status}/></div>
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{profile.name} {profile.surname}</div>
+            <div style={{ fontSize:11, color:C.textMuted }}>@{profile.username}</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── BOTTOM NAV (mobile) ────────────────────────────────────────────────────
+  const BottomNav = () => (
+    <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", zIndex:100, paddingBottom:"env(safe-area-inset-bottom)" }}>
+      {NAV.map(n=>(
+        <button key={n.id} onClick={()=>setTab(n.id)} style={{
+          flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+          gap:3, padding:"10px 4px", border:"none", background:"none", cursor:"pointer",
+          color: tab===n.id ? C.accentLight : C.textDim, position:"relative",
+        }}>
+          <span style={{ fontSize:20 }}>{n.icon}</span>
+          <span style={{ fontSize:10, fontWeight: tab===n.id ? 600 : 400 }}>{n.label}</span>
+          {n.badge>0 && <span style={{ position:"absolute", top:6, right:"50%", transform:"translateX(8px)", background:C.danger, color:"#fff", borderRadius:20, fontSize:9, fontWeight:700, padding:"1px 5px" }}>{n.badge}</span>}
+        </button>
+      ))}
+    </div>
+  );
+
+  // ── MOBILE HEADER ──────────────────────────────────────────────────────────
+  const MobileHeader = () => (
+    <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"0 16px", display:"flex", alignItems:"center", justifyContent:"space-between", height:56, position:"sticky", top:0, zIndex:50 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+        <div style={{ width:28, height:28, background:C.accent, borderRadius:7, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14 }}>📅</div>
+        <span style={{ fontSize:16, fontWeight:700 }}>Planify</span>
+      </div>
+      <button onClick={()=>setShowProfile(true)} style={{ background:"none", border:"none", cursor:"pointer", position:"relative" }}>
+        <Avatar initials={profile.name[0]+profile.surname[0]} color={C.accent} size={32}/>
+        <div style={{ position:"absolute", bottom:-1, right:-1 }}><StatusDot status={profile.status} size={8}/></div>
+      </button>
+    </div>
+  );
+
+  // ── CALENDAR TAB ───────────────────────────────────────────────────────────
+  const CalendarTab = () => (
+    <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr", gap:16 }}>
+      {/* Calendar grid */}
+      <div style={card}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <button onClick={()=>setCurMonth(new Date(curMonth.getFullYear(),curMonth.getMonth()-1,1))}
+            style={{ background:C.surfaceHigh, border:"none", borderRadius:8, color:C.text, cursor:"pointer", fontSize:16, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+          <span style={{ fontWeight:600, fontSize:14 }}>{MONTHS[curMonth.getMonth()]} {curMonth.getFullYear()}</span>
+          <button onClick={()=>setCurMonth(new Date(curMonth.getFullYear(),curMonth.getMonth()+1,1))}
+            style={{ background:C.surfaceHigh, border:"none", borderRadius:8, color:C.text, cursor:"pointer", fontSize:16, width:32, height:32, display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:6 }}>
+          {DAYS_SHORT.map(d=><div key={d} style={{ textAlign:"center", fontSize:10, fontWeight:600, color:C.textDim, padding:"4px 0", letterSpacing:"0.4px" }}>{d}</div>)}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+          {Array.from({length:firstDay}).map((_,i)=><div key={`e${i}`}/>)}
+          {Array.from({length:daysInMonth},(_,i)=>i+1).map(day=>{
+            const d=new Date(curMonth.getFullYear(),curMonth.getMonth(),day);
+            const ds=fmtDate(d);
+            const dayEvs=eventsForDate(d);
+            const isToday=ds===fmtDate(today);
+            const isSel=ds===fmtDate(selDate);
+            return (
+              <button key={day} onClick={()=>{ setSelDate(d); if(curMonth.getMonth()!==d.getMonth()) setCurMonth(new Date(d.getFullYear(),d.getMonth(),1)); }} style={{
+                background:isSel?C.accent:isToday?C.accentMuted:"none",
+                border:`1px solid ${isSel?C.accent:isToday?C.accentLight:"transparent"}`,
+                borderRadius:8, color:isSel?"#fff":C.text, padding:"7px 2px 5px", cursor:"pointer",
+                display:"flex", flexDirection:"column", alignItems:"center", gap:2,
+              }}>
+                <span style={{ fontSize:12, fontWeight:isToday?700:400 }}>{day}</span>
+                {dayEvs.length>0 && (
+                  <div style={{ display:"flex", gap:2, justifyContent:"center" }}>
+                    {dayEvs.slice(0,3).map((ev,idx)=>(
+                      <div key={idx} style={{ width:4, height:4, borderRadius:"50%", background:isSel?"#fff":EVENT_TYPES[ev.type].color }}/>
+                    ))}
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Day panel */}
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontSize:12, color:C.textMuted }}>{DAYS_SHORT[selDate.getDay()]}, {MONTHS[selDate.getMonth()]}</div>
+            <div style={{ fontSize:22, fontWeight:700 }}>{selDate.getDate()}</div>
+          </div>
+          <button onClick={()=>setShowAdd(true)} style={{ ...btn, padding:"8px 16px", fontSize:13, display:"flex", alignItems:"center", gap:6 }}>+ Νέο</button>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {eventsForDate(selDate).length===0 ? (
+            <div style={{ ...card, textAlign:"center", padding:28 }}>
+              <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
+              <div style={{ color:C.textMuted, fontSize:13 }}>Δεν υπάρχουν events</div>
+              <button onClick={()=>setShowAdd(true)} style={{ marginTop:12, background:"none", border:`1px solid ${C.border}`, borderRadius:8, color:C.accent, padding:"7px 14px", cursor:"pointer", fontSize:12 }}>+ Πρόσθεσε</button>
+            </div>
+          ) : eventsForDate(selDate).map(ev=><EventCard key={ev.id} ev={ev}/>)}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── WEEK TAB ───────────────────────────────────────────────────────────────
+  const WeekTab = () => (
+    <div>
+      <div style={{ fontWeight:700, fontSize:18, marginBottom:16 }}>Εβδομάδα</div>
+      <div style={{ display:"grid", gridTemplateColumns: isMobile?"repeat(4,1fr)":"repeat(7,1fr)", gap:8 }}>
+        {weekDates.slice(0, isMobile?4:7).map((d,i)=>{
+          const ds=fmtDate(d); const dayEvs=eventsForDate(d); const isToday=ds===fmtDate(today);
+          return (
+            <div key={i} onClick={()=>{ setSelDate(d); setTab("calendar"); }} style={{ ...card, padding:12, border:`1px solid ${isToday?C.accent:C.border}`, cursor:"pointer", minHeight:110 }}>
+              <div style={{ fontSize:10, color:C.textMuted, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.4px" }}>{DAYS_SHORT[d.getDay()]}</div>
+              <div style={{ fontSize:20, fontWeight:700, color:isToday?C.accentLight:C.text, marginBottom:6 }}>{d.getDate()}</div>
+              {dayEvs.map(ev=>(
+                <div key={ev.id} style={{ fontSize:10, background:`${EVENT_TYPES[ev.type].color}25`, color:EVENT_TYPES[ev.type].color, borderRadius:4, padding:"2px 5px", marginBottom:3, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {ev.time} {ev.title}
+                </div>
+              ))}
+              {dayEvs.length===0 && <div style={{ fontSize:11, color:C.textDim }}>—</div>}
+            </div>
+          );
+        })}
+      </div>
+      {isMobile && <div style={{ textAlign:"center", marginTop:8, fontSize:12, color:C.textDim }}>Εμφανίζονται 4 ημέρες</div>}
+    </div>
+  );
+
+  // ── FRIENDS TAB ────────────────────────────────────────────────────────────
+  const FriendsTab = () => (
+    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+      <div style={{ fontWeight:700, fontSize:18 }}>Φίλοι</div>
+      {/* Search */}
+      <div style={{ ...card, padding:16 }}>
+        <div style={{ fontSize:13, fontWeight:600, marginBottom:10, color:C.textMuted }}>Αναζήτηση ατόμων</div>
+        <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)}
+          placeholder="Όνομα ή @username..." style={inputSt}/>
+        {searchResults.length>0 && (
+          <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:8 }}>
+            {searchResults.map(u=>(
+              <div key={u.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+                <div style={{ position:"relative" }}>
+                  <Avatar initials={u.avatar} color={u.color} size={36}/>
+                  <div style={{ position:"absolute", bottom:0, right:0 }}><StatusDot status={u.status}/></div>
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:600 }}>{u.name} {u.surname}</div>
+                  <div style={{ fontSize:11, color:C.textMuted }}>@{u.username}</div>
+                </div>
+                <button onClick={()=>addFriend(u)} style={{ ...btn, padding:"6px 14px", fontSize:12 }}>+ Πρόσθεσε</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {searchQuery.length>1 && searchResults.length===0 && (
+          <div style={{ marginTop:10, fontSize:13, color:C.textDim, textAlign:"center" }}>Δεν βρέθηκαν αποτελέσματα</div>
+        )}
+      </div>
+      {/* Friends list */}
+      {friends.map(f=>{
+        const sharedEvs = events.filter(e=>e.shared.includes(f.id));
+        const st = STATUS_OPTIONS.find(s=>s.key===f.status);
+        return (
+          <div key={f.id} style={card}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+              <div style={{ position:"relative" }}>
+                <Avatar initials={f.avatar} color={f.color} size={44}/>
+                <div style={{ position:"absolute", bottom:0, right:0 }}><StatusDot status={f.status} size={10}/></div>
+              </div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontWeight:600 }}>{f.name} {f.surname}</div>
+                <div style={{ fontSize:12, color:st?.color }}>{st?.dot} {st?.label}</div>
+              </div>
+              <button onClick={()=>setShowInviteModal(f)} style={{ background:C.accentMuted, border:"none", borderRadius:8, color:C.accentLight, padding:"8px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>Στείλε Invite</button>
+              <button onClick={()=>setShowMeetup(f)} style={{ background:`${C.success}18`, border:"none", borderRadius:8, color:C.success, padding:"8px 12px", cursor:"pointer", fontSize:12, fontWeight:600 }}>📅 Συνάντηση</button>
+            </div>
+            {sharedEvs.length>0 ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                <div style={{ fontSize:11, color:C.textDim, marginBottom:2 }}>Κοινά events</div>
+                {sharedEvs.map(ev=>(
+                  <div key={ev.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 10px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}` }}>
+                    <div style={{ width:5, height:5, borderRadius:"50%", background:EVENT_TYPES[ev.type].color }}/>
+                    <span style={{ fontSize:12, fontWeight:500, flex:1 }}>{ev.title}</span>
+                    <span style={{ fontSize:11, color:C.textMuted }}>{ev.date} {ev.time}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div style={{ fontSize:12, color:C.textDim }}>Δεν υπάρχουν κοινά events ακόμα</div>}
+            {/* Sent proposals */}
+            {proposals.filter(p=>p.toId===f.id).map(p=>(
+              <div key={p.id} style={{ marginTop:8, padding:"10px 12px", background:C.bg, borderRadius:10, border:`1px solid ${p.status==="accepted"?C.success+"44":p.status==="declined"?C.danger+"44":C.border}` }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:16 }}>{p.icon}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:12, fontWeight:600 }}>Πρόταση: {p.label}</div>
+                    <div style={{ fontSize:11, color:C.textMuted }}>{p.slots.length} επιλογές ημερομηνίας</div>
+                  </div>
+                  <span style={{ fontSize:11, padding:"3px 9px", borderRadius:20, fontWeight:600,
+                    background: p.status==="accepted"?`${C.success}22`:p.status==="declined"?`${C.danger}22`:`${C.warning}22`,
+                    color: p.status==="accepted"?C.success:p.status==="declined"?C.danger:C.warning }}>
+                    {p.status==="accepted"?"✓ Αποδέχτηκε":p.status==="declined"?"✕ Αρνήθηκε":"⏳ Εκκρεμεί"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  // ── REMINDERS TAB ──────────────────────────────────────────────────────────
+  const RemindersTab = () => {
+    const reminders = events.filter(e=>e.reminder);
+    const myProposals = proposals.filter(p=>p.toId===0 && p.status==="pending");
+    return (
+      <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+        {/* Pending proposals */}
+        {myProposals.length>0 && (
+          <div>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+              Προτάσεις Συνάντησης
+              <span style={{ background:C.purple, color:"#fff", borderRadius:20, fontSize:10, fontWeight:700, padding:"2px 7px" }}>{myProposals.length}</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {myProposals.map(p=>{
+                const sender = ALL_USERS.find(u=>u.id===p.fromId);
+                return (
+                  <div key={p.id} style={{ ...card, borderLeft:`3px solid ${C.purple}` }}>
+                    <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                      <span style={{ fontSize:24 }}>{p.icon}</span>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:600, fontSize:14 }}>{p.label} με {sender?.name}</div>
+                        <div style={{ fontSize:12, color:C.textMuted }}>{p.slots.length} επιλογές για εσένα</div>
+                        {p.message && <div style={{ fontSize:12, color:C.textMuted, fontStyle:"italic", marginTop:3 }}>"{p.message}"</div>}
+                      </div>
+                    </div>
+                    <button onClick={()=>setShowProposalReply(p)} style={{ ...btn, width:"100%", marginTop:12, fontSize:13 }}>
+                      📅 Επίλεξε ημερομηνία
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {invites.length>0 && (
+          <div>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:10, display:"flex", alignItems:"center", gap:8 }}>
+              Εκκρεμή Invites
+              <span style={{ background:C.danger, color:"#fff", borderRadius:20, fontSize:10, fontWeight:700, padding:"2px 7px" }}>{invites.length}</span>
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {invites.map(inv=>{
+                const sender = ALL_USERS.find(u=>u.id===inv.fromId);
+                return (
+                  <div key={inv.id} style={{ ...card, borderLeft:`3px solid ${C.purple}` }}>
+                    <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
+                      {sender && <Avatar initials={sender.avatar} color={sender.color} size={36}/>}
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:600, fontSize:14 }}>{inv.title}</div>
+                        <div style={{ fontSize:12, color:C.textMuted }}>{inv.date} — {inv.time}</div>
+                        {inv.message && <div style={{ marginTop:6, fontSize:12, color:C.text, background:C.surfaceHigh, borderRadius:8, padding:"6px 10px" }}>"{inv.message}"</div>}
+                        <div style={{ fontSize:11, color:C.textMuted, marginTop:4 }}>από {sender?.name} {sender?.surname}</div>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                      <button onClick={()=>acceptInvite(inv.id)} style={{ ...btn, flex:1, padding:"8px", fontSize:12 }}>✓ Αποδοχή</button>
+                      <button onClick={()=>declineInvite(inv.id)} style={{ ...btnGhost, flex:1, padding:"8px", fontSize:12 }}>✕ Άρνηση</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {/* Reminders */}
+        <div>
+          <div style={{ fontWeight:700, fontSize:15, marginBottom:10 }}>Υπενθυμίσεις</div>
+          {reminders.length===0 ? (
+            <div style={{ ...card, textAlign:"center", padding:32 }}>
+              <div style={{ fontSize:28, marginBottom:8 }}>🔔</div>
+              <div style={{ color:C.textMuted, fontSize:13 }}>Δεν υπάρχουν υπενθυμίσεις</div>
+            </div>
+          ) : reminders.map(ev=>{
+            const isPast=ev.date<fmtDate(today); const isToday=ev.date===fmtDate(today);
+            return (
+              <div key={ev.id} style={{ ...card, marginBottom:8, borderLeft:`3px solid ${isToday?C.warning:isPast?C.textDim:C.accent}`, opacity:isPast?0.5:1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ fontSize:20 }}>{isToday?"⚡":isPast?"✅":"🔔"}</div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, fontSize:14 }}>{ev.title}</div>
+                    <div style={{ fontSize:12, color:C.textMuted }}>{ev.date} — {ev.time}</div>
+                  </div>
+                  <span style={{ fontSize:11, padding:"4px 10px", borderRadius:20,
+                    background:isToday?`${C.warning}22`:isPast?`${C.textDim}22`:`${C.accent}22`,
+                    color:isToday?C.warning:isPast?C.textDim:C.accentLight, fontWeight:600 }}>
+                    {isToday?"Σήμερα":isPast?"Πέρασε":"Προσεχώς"}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  // ── PROFILE MODAL ──────────────────────────────────────────────────────────
+  const ProfileModal = () => (
+    <Modal onClose={()=>setShowProfile(false)} title="Προφίλ & Ρυθμίσεις" width={420}>
+      {/* Sub-tabs */}
+      <div style={{ display:"flex", gap:4, marginBottom:20, background:C.bg, borderRadius:10, padding:4 }}>
+        {[["info","👤 Πληροφορίες"],["notif","🔔 Ειδοποιήσεις"],["status","🟢 Status"]].map(([k,l])=>(
+          <button key={k} onClick={()=>setProfileTab(k)} style={{ flex:1, background:profileTab===k?C.surface:"none", border:"none", borderRadius:8, padding:"8px 4px", fontSize:12, fontWeight:profileTab===k?600:400, color:profileTab===k?C.text:C.textMuted, cursor:"pointer" }}>{l}</button>
+        ))}
+      </div>
+
+      {profileTab==="info" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
+            <div style={{ position:"relative" }}>
+              <Avatar initials={profile.name[0]+profile.surname[0]} color={C.accent} size={64}/>
+              <div style={{ position:"absolute", bottom:2, right:2 }}><StatusDot status={profile.status} size={12}/></div>
+            </div>
+          </div>
+          {[["Όνομα","name"],["Επίθετο","surname"],["Username","username"],["Email","email"]].map(([label,key])=>(
+            <div key={key}>
+              <div style={{ fontSize:12, color:C.textMuted, marginBottom:4 }}>{label}</div>
+              <input value={profile[key]} onChange={e=>setProfile({...profile,[key]:e.target.value})} style={inputSt}/>
+            </div>
+          ))}
+          <button onClick={()=>{ toast("Αποθηκεύτηκε!"); setShowProfile(false); }} style={{ ...btn, marginTop:4 }}>Αποθήκευση</button>
+        </div>
+      )}
+
+      {profileTab==="notif" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          {[
+            ["Push ειδοποιήσεις","push","Λαμβάνεις ειδοποιήσεις στη συσκευή σου"],
+            ["Email ειδοποιήσεις","email","Λαμβάνεις ειδοποιήσεις στο email σου"],
+            ["Ήχος","sound","Ήχος κατά τις ειδοποιήσεις"],
+            ["Υπενθυμίσεις event","eventReminders","30 λεπτά πριν από κάθε event"],
+            ["Invites φίλων","invites","Ειδοποίηση όταν σε καλούν σε event"],
+          ].map(([label,key,desc])=>(
+            <div key={key} style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 14px", background:C.bg, borderRadius:10, border:`1px solid ${C.border}` }}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{label}</div>
+                <div style={{ fontSize:11, color:C.textMuted, marginTop:2 }}>{desc}</div>
+              </div>
+              <div onClick={()=>setProfile({...profile,notif:{...profile.notif,[key]:!profile.notif[key]}})}
+                style={{ width:42, height:24, borderRadius:12, background:profile.notif[key]?C.accent:C.border, cursor:"pointer", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+                <div style={{ position:"absolute", top:3, left:profile.notif[key]?20:3, width:18, height:18, borderRadius:"50%", background:"#fff", transition:"left 0.2s" }}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {profileTab==="status" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ fontSize:13, color:C.textMuted, marginBottom:4 }}>Οι φίλοι σου βλέπουν την κατάστασή σου</div>
+          {STATUS_OPTIONS.map(s=>(
+            <button key={s.key} onClick={()=>{ setProfile({...profile,status:s.key}); toast(`Status: ${s.label}`); }} style={{
+              display:"flex", alignItems:"center", gap:12, padding:"14px 16px", borderRadius:12,
+              border:`2px solid ${profile.status===s.key?s.color:C.border}`,
+              background:profile.status===s.key?`${s.color}15`:C.bg, cursor:"pointer",
+            }}>
+              <div style={{ width:12, height:12, borderRadius:"50%", background:s.color }}/>
+              <span style={{ fontSize:14, fontWeight:500, color:C.text }}>{s.label}</span>
+              {profile.status===s.key && <span style={{ marginLeft:"auto", fontSize:12, color:s.color }}>✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </Modal>
+  );
+
+  // ── ADD EVENT MODAL ────────────────────────────────────────────────────────
+  const AddEventModal = () => (
+    <Modal onClose={()=>setShowAdd(false)} title={`Νέο Event — ${selDate.getDate()} ${MONTHS_SHORT[selDate.getMonth()]}`} width={420}>
+      {/* Quick templates */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:12, color:C.textMuted, marginBottom:8 }}>Γρήγορη επιλογή</div>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {QUICK_TEMPLATES.map(t=>(
+            <button key={t.label} onClick={()=>applyTemplate(t)} style={{ background:C.surfaceHigh, border:`1px solid ${C.border}`, borderRadius:20, padding:"5px 12px", cursor:"pointer", fontSize:12, color:C.text }}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:11 }}>
+        <input value={newEv.title} onChange={e=>setNewEv({...newEv,title:e.target.value})} placeholder="Τίτλος event..." style={inputSt}/>
+        <input type="time" value={newEv.time} onChange={e=>setNewEv({...newEv,time:e.target.value})} style={inputSt}/>
+        <select value={newEv.type} onChange={e=>setNewEv({...newEv,type:e.target.value})} style={inputSt}>
+          {Object.entries(EVENT_TYPES).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <div>
+          <div style={{ fontSize:12, color:C.textMuted, marginBottom:7 }}>Κοινοποίηση με φίλους</div>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {friends.map(f=>{
+              const sel=newEv.shared.includes(f.id);
+              return (
+                <button key={f.id} onClick={()=>setNewEv({...newEv,shared:sel?newEv.shared.filter(x=>x!==f.id):[...newEv.shared,f.id]})}
+                  style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 11px", borderRadius:20, border:`1px solid ${sel?f.color:C.border}`, background:sel?`${f.color}22`:"none", cursor:"pointer", color:sel?f.color:C.textMuted, fontSize:12, fontWeight:sel?600:400 }}>
+                  <Avatar initials={f.avatar} color={f.color} size={16}/>{f.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {newEv.shared.length>0 && (
+          <input value={newEv.inviteMsg} onChange={e=>setNewEv({...newEv,inviteMsg:e.target.value})}
+            placeholder="Μήνυμα στους φίλους (προαιρετικό)..." style={inputSt}/>
+        )}
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:C.text }}>
+          <input type="checkbox" checked={newEv.reminder} onChange={e=>setNewEv({...newEv,reminder:e.target.checked})}/>
+          🔔 Υπενθύμιση 30 λεπτά πριν
+        </label>
+      </div>
+      <div style={{ display:"flex", gap:10, marginTop:18 }}>
+        <button onClick={()=>setShowAdd(false)} style={{ ...btnGhost, flex:1 }}>Άκυρο</button>
+        <button onClick={addEvent} style={{ ...btn, flex:2 }}>Αποθήκευση</button>
+      </div>
+    </Modal>
+  );
+
+  // ── SHARE MODAL ────────────────────────────────────────────────────────────
+  const ShareModal = () => {
+    const [localShare, setLocalShare] = useState(showShare?.shared||[]);
+    const [msg, setMsg] = useState("");
+    return (
+      <Modal onClose={()=>setShowShare(null)} title="Κοινοποίηση Event" width={380}>
+        <div style={{ fontSize:13, color:C.textMuted, marginBottom:14 }}>"{showShare?.title}"</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+          {friends.map(f=>{
+            const isSh=localShare.includes(f.id);
+            return (
+              <div key={f.id} onClick={()=>setLocalShare(isSh?localShare.filter(x=>x!==f.id):[...localShare,f.id])}
+                style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 14px", borderRadius:10, background:C.bg, border:`1px solid ${isSh?f.color+"55":C.border}`, cursor:"pointer" }}>
+                <div style={{ position:"relative" }}><Avatar initials={f.avatar} color={f.color} size={36}/><div style={{ position:"absolute", bottom:0, right:0 }}><StatusDot status={f.status}/></div></div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:500 }}>{f.name} {f.surname}</div>
+                  <div style={{ fontSize:11, color:C.textMuted }}>@{f.username}</div>
+                </div>
+                <div style={{ width:20, height:20, borderRadius:"50%", border:`2px solid ${isSh?f.color:C.border}`, background:isSh?f.color:"none", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, color:"#fff", flexShrink:0 }}>{isSh?"✓":""}</div>
+              </div>
+            );
+          })}
+        </div>
+        {localShare.length>0 && <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Μήνυμα (προαιρετικό)..." style={{ ...inputSt, marginBottom:14 }}/>}
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={()=>setShowShare(null)} style={{ ...btnGhost, flex:1 }}>Άκυρο</button>
+          <button onClick={()=>{ localShare.forEach(uid=>{ if(!showShare.shared.includes(uid)) toggleShare(showShare.id,uid); }); showShare.shared.forEach(uid=>{ if(!localShare.includes(uid)) toggleShare(showShare.id,uid); }); setShowShare(null); toast("Αποθηκεύτηκε!"); }} style={{ ...btn, flex:2 }}>Αποστολή</button>
+        </div>
+      </Modal>
+    );
+  };
+
+  // ── INVITE MODAL ───────────────────────────────────────────────────────────
+  const InviteModal = () => {
+    const [selEv, setSelEv] = useState(null);
+    const [msg, setMsg] = useState("");
+    return (
+      <Modal onClose={()=>setShowInviteModal(null)} title={`Invite στον/ην ${showInviteModal?.name}`} width={400}>
+        <div style={{ fontSize:13, color:C.textMuted, marginBottom:12 }}>Επίλεξε event για να στείλεις invite</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:12, maxHeight:200, overflowY:"auto" }}>
+          {events.map(ev=>(
+            <div key={ev.id} onClick={()=>setSelEv(ev.id===selEv?null:ev.id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:10, background:C.bg, border:`1px solid ${selEv===ev.id?C.accent:C.border}`, cursor:"pointer" }}>
+              <div style={{ width:6, height:6, borderRadius:"50%", background:EVENT_TYPES[ev.type].color, flexShrink:0 }}/>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:500 }}>{ev.title}</div>
+                <div style={{ fontSize:11, color:C.textMuted }}>{ev.date} {ev.time}</div>
+              </div>
+              {selEv===ev.id && <span style={{ color:C.accent, fontSize:14 }}>✓</span>}
+            </div>
+          ))}
+        </div>
+        <input value={msg} onChange={e=>setMsg(e.target.value)} placeholder="Μήνυμα (προαιρετικό)..." style={{ ...inputSt, marginBottom:14 }}/>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={()=>setShowInviteModal(null)} style={{ ...btnGhost, flex:1 }}>Άκυρο</button>
+          <button onClick={()=>{ if(!selEv) return; toast(`Invite στάλθηκε στον/ην ${showInviteModal.name}!`); setShowInviteModal(null); }} style={{ ...btn, flex:2, opacity:selEv?1:0.5 }}>Αποστολή Invite</button>
+        </div>
+      </Modal>
+    );
+  };
+
+  // ── MEETUP PROPOSAL MODAL (send) ──────────────────────────────────────────
+  const MeetupModal = () => {
+    const [step, setStep]         = useState(1); // 1=type, 2=slots, 3=confirm
+    const [mType, setMType]       = useState(MEETUP_TYPES[0]);
+    const [msg, setMsg]           = useState("");
+    const [slots, setSlots]       = useState([
+      { id:"n1", date:"", time:"", picked:false },
+      { id:"n2", date:"", time:"", picked:false },
+    ]);
+
+    const addSlot = () => {
+      if (slots.length >= 5) return;
+      setSlots([...slots, { id:`n${Date.now()}`, date:"", time:"", picked:false }]);
+    };
+    const removeSlot = id => setSlots(slots.filter(s=>s.id!==id));
+    const updateSlot = (id, field, val) => setSlots(slots.map(s=>s.id===id?{...s,[field]:val}:s));
+
+    const validSlots = slots.filter(s=>s.date && s.time);
+    const canSend = validSlots.length >= 1;
+
+    const send = () => {
+      const prop = {
+        id: Date.now(), fromId:0, toId:showMeetup.id,
+        type:mType.type, label:mType.label, icon:mType.icon,
+        message:msg, status:"sent",
+        slots: validSlots,
+      };
+      setProposals([...proposals, prop]);
+      setShowMeetup(null);
+      toast(`Πρόταση στάλθηκε στον/ην ${showMeetup.name}!`);
+    };
+
+    return (
+      <Modal onClose={()=>setShowMeetup(null)} title={`Πρόταση Συνάντησης — ${showMeetup?.name}`} width={440}>
+        {/* Step indicator */}
+        <div style={{ display:"flex", gap:6, marginBottom:20 }}>
+          {["Τύπος","Ημερομηνίες","Επιβεβαίωση"].map((s,i)=>(
+            <div key={i} style={{ flex:1, height:3, borderRadius:3, background: step>i ? C.accent : C.border, transition:"background 0.2s" }}/>
+          ))}
+        </div>
+
+        {step===1 && (
+          <div>
+            <div style={{ fontSize:13, color:C.textMuted, marginBottom:12 }}>Για τι είδους συνάντηση;</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:16 }}>
+              {MEETUP_TYPES.map(t=>(
+                <button key={t.label} onClick={()=>setMType(t)} style={{
+                  display:"flex", alignItems:"center", gap:10, padding:"12px 14px",
+                  borderRadius:12, border:`2px solid ${mType.label===t.label?C.accent:C.border}`,
+                  background:mType.label===t.label?C.accentMuted:C.bg, cursor:"pointer",
+                }}>
+                  <span style={{ fontSize:20 }}>{t.icon}</span>
+                  <span style={{ fontSize:13, fontWeight:500, color:C.text }}>{t.label}</span>
+                </button>
+              ))}
+            </div>
+            <textarea value={msg} onChange={e=>setMsg(e.target.value)}
+              placeholder={`Μήνυμα στον/ην ${showMeetup?.name}... (προαιρετικό)`}
+              rows={2} style={{ ...inputSt, resize:"none", lineHeight:1.5 }}/>
+            <button onClick={()=>setStep(2)} style={{ ...btn, width:"100%", marginTop:14 }}>Επόμενο →</button>
+          </div>
+        )}
+
+        {step===2 && (
+          <div>
+            <div style={{ fontSize:13, color:C.textMuted, marginBottom:12 }}>
+              Πρόσθεσε 1–5 επιλογές ημερομηνίας. Ο/Η {showMeetup?.name} θα επιλέξει ποια τον/την βολεύει.
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:12 }}>
+              {slots.map((slot,i)=>(
+                <div key={slot.id} style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <div style={{ width:24, height:24, borderRadius:"50%", background:C.accentMuted, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:C.accentLight, flexShrink:0 }}>{i+1}</div>
+                  <input type="date" value={slot.date} onChange={e=>updateSlot(slot.id,"date",e.target.value)}
+                    style={{ ...inputSt, flex:1 }} min="2026-06-16"/>
+                  <input type="time" value={slot.time} onChange={e=>updateSlot(slot.id,"time",e.target.value)}
+                    style={{ ...inputSt, width:100 }}/>
+                  {slots.length>1 && (
+                    <button onClick={()=>removeSlot(slot.id)} style={{ background:"none", border:"none", color:C.textDim, cursor:"pointer", fontSize:18, flexShrink:0 }}>×</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {slots.length<5 && (
+              <button onClick={addSlot} style={{ ...btnGhost, width:"100%", fontSize:12, padding:"8px" }}>+ Πρόσθεσε επιλογή</button>
+            )}
+            <div style={{ display:"flex", gap:10, marginTop:14 }}>
+              <button onClick={()=>setStep(1)} style={{ ...btnGhost, flex:1 }}>← Πίσω</button>
+              <button onClick={()=>setStep(3)} disabled={!canSend} style={{ ...btn, flex:2, opacity:canSend?1:0.5 }}>Επόμενο →</button>
+            </div>
+          </div>
+        )}
+
+        {step===3 && (
+          <div>
+            <div style={{ fontSize:13, color:C.textMuted, marginBottom:14 }}>Επιβεβαίωση πρότασης</div>
+            <div style={{ background:C.bg, borderRadius:12, padding:16, border:`1px solid ${C.border}`, marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                <span style={{ fontSize:24 }}>{mType.icon}</span>
+                <div>
+                  <div style={{ fontWeight:600 }}>{mType.label}</div>
+                  <div style={{ fontSize:12, color:C.textMuted }}>με {showMeetup?.name} {showMeetup?.surname}</div>
+                </div>
+              </div>
+              {msg && <div style={{ fontSize:12, color:C.textMuted, fontStyle:"italic", marginBottom:10 }}>"{msg}"</div>}
+              <div style={{ fontSize:12, color:C.textMuted, marginBottom:6 }}>Επιλογές ημερομηνίας:</div>
+              {validSlots.map((s,i)=>(
+                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderBottom: i<validSlots.length-1?`1px solid ${C.border}`:"none" }}>
+                  <span style={{ fontSize:12, color:C.accentLight, fontWeight:600 }}>{i+1}.</span>
+                  <span style={{ fontSize:13 }}>{s.date} — {s.time}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setStep(2)} style={{ ...btnGhost, flex:1 }}>← Πίσω</button>
+              <button onClick={send} style={{ ...btn, flex:2 }}>✓ Αποστολή</button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    );
+  };
+
+  // ── PROPOSAL REPLY MODAL (receive) ────────────────────────────────────────
+  const ProposalReplyModal = () => {
+    const p = showProposalReply;
+    const sender = ALL_USERS.find(u=>u.id===p?.fromId);
+    const [picked, setPicked] = useState(null);
+
+    const accept = () => {
+      if (!picked) return;
+      const slot = p.slots.find(s=>s.id===picked);
+      // Add to calendar
+      setEvents(ev=>[...ev, {
+        id:Date.now(), title:`${p.icon} ${p.label} με ${sender?.name}`,
+        date:slot.date, time:slot.time, type:p.type, shared:[p.fromId], reminder:true
+      }]);
+      setProposals(proposals.map(pr=>pr.id===p.id?{...pr,status:"accepted"}:pr));
+      setShowProposalReply(null);
+      toast(`Συνάντηση επιβεβαιώθηκε! Προστέθηκε στο ημερολόγιο.`);
+    };
+
+    const decline = () => {
+      setProposals(proposals.map(pr=>pr.id===p.id?{...pr,status:"declined"}:pr));
+      setShowProposalReply(null);
+      toast("Αρνήθηκες την πρόταση","warning");
+    };
+
+    if (!p || !sender) return null;
+    return (
+      <Modal onClose={()=>setShowProposalReply(null)} title="Πρόταση Συνάντησης" width={420}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16, padding:"12px 14px", background:C.bg, borderRadius:12, border:`1px solid ${C.border}` }}>
+          <div style={{ position:"relative" }}>
+            <Avatar initials={sender.avatar} color={sender.color} size={44}/>
+            <div style={{ position:"absolute", bottom:0, right:0 }}><StatusDot status={sender.status} size={10}/></div>
+          </div>
+          <div>
+            <div style={{ fontWeight:600 }}>{sender.name} {sender.surname}</div>
+            <div style={{ fontSize:12, color:C.textMuted }}>προτείνει {p.icon} {p.label}</div>
+          </div>
+        </div>
+        {p.message && (
+          <div style={{ fontSize:13, color:C.text, background:C.surfaceHigh, borderRadius:10, padding:"10px 14px", marginBottom:14, fontStyle:"italic" }}>"{p.message}"</div>
+        )}
+        <div style={{ fontSize:13, fontWeight:600, marginBottom:10 }}>Επίλεξε ημερομηνία που σε βολεύει:</div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+          {p.slots.map((slot,i)=>(
+            <button key={slot.id} onClick={()=>setPicked(slot.id===picked?null:slot.id)} style={{
+              display:"flex", alignItems:"center", gap:12, padding:"14px 16px",
+              borderRadius:12, border:`2px solid ${picked===slot.id?C.accent:C.border}`,
+              background:picked===slot.id?C.accentMuted:C.bg, cursor:"pointer", textAlign:"left",
+            }}>
+              <div style={{ width:28, height:28, borderRadius:"50%", background:picked===slot.id?C.accent:C.surfaceHigh, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:picked===slot.id?"#fff":C.textMuted, flexShrink:0 }}>{i+1}</div>
+              <div>
+                <div style={{ fontSize:14, fontWeight:500, color:C.text }}>{slot.date}</div>
+                <div style={{ fontSize:12, color:C.textMuted }}>⏰ {slot.time}</div>
+              </div>
+              {picked===slot.id && <span style={{ marginLeft:"auto", color:C.accent, fontSize:16 }}>✓</span>}
+            </button>
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={decline} style={{ ...btnGhost, flex:1 }}>✕ Άρνηση</button>
+          <button onClick={accept} disabled={!picked} style={{ ...btn, flex:2, opacity:picked?1:0.5 }}>✓ Επιβεβαίωση</button>
+        </div>
+      </Modal>
+    );
+  };
+
+  // ── GENERIC MODAL WRAPPER ──────────────────────────────────────────────────
+  function Modal({ onClose, title, width=400, children }) {
+    return (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }} onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+        <div style={{ background:C.surface, borderRadius:16, padding:24, width:"100%", maxWidth:width, border:`1px solid ${C.border}`, maxHeight:"90vh", overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ fontWeight:700, fontSize:16 }}>{title}</div>
+            <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:C.textMuted, fontSize:20, lineHeight:1 }}>×</button>
+          </div>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // ── RENDER ─────────────────────────────────────────────────────────────────
+  const tabContent = { calendar:<CalendarTab/>, week:<WeekTab/>, friends:<FriendsTab/>, reminders:<RemindersTab/> };
+
+  return (
+    <div style={{ minHeight:"100vh", background:C.bg, color:C.text, fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex" }}>
+      {!isMobile && <Sidebar/>}
+      <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0 }}>
+        {isMobile && <MobileHeader/>}
+        <main style={{ flex:1, padding: isMobile?"16px 16px 80px":"24px", overflowY:"auto" }}>
+          {tabContent[tab]}
+        </main>
+        {isMobile && <BottomNav/>}
+      </div>
+
+      {showProfile   && <ProfileModal/>}
+      {showAdd       && <AddEventModal/>}
+      {showShare     && <ShareModal/>}
+      {showInviteModal && <InviteModal/>}
+      {showMeetup    && <MeetupModal/>}
+      {showProposalReply && <ProposalReplyModal/>}
+      <Toast notif={notif}/>
+
+      <style>{`
+        * { box-sizing:border-box; margin:0; padding:0; }
+        ::-webkit-scrollbar { width:4px; }
+        ::-webkit-scrollbar-track { background:transparent; }
+        ::-webkit-scrollbar-thumb { background:${C.border}; border-radius:4px; }
+        @keyframes slideIn { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:none; } }
+        input[type=time]::-webkit-calendar-picker-indicator { filter:invert(1) opacity(0.4); }
+      `}</style>
+    </div>
+  );
+}
